@@ -5,6 +5,8 @@ use byteorder::{BigEndian, ByteOrder};
 use core::fmt::Display;
 use embedded_hal::blocking::i2c::{Write, WriteRead};
 
+const DEFAULT_ADDRESS: u8 = 0x20; // Default address
+
 #[allow(dead_code)]
 enum Register {
     Configuration = 0x00,
@@ -17,6 +19,12 @@ enum Register {
     Alert = 0x07,
     Manufacturer = 0xFE,
     DieId = 0xFF,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Direction {
+    Output,
+    Input,
 }
 
 /// Enum used for mcp23017 addressing based on pin connection
@@ -54,6 +62,90 @@ impl Display for Error {
             Error::InvalidParameter => write!(f, "Invalid Parameter"),
             Error::MissingAddress => write!(f, "Missing Device Address"),
         }
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+struct NonConfigured;
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+struct Output;
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+struct InputPullUp;
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+struct InputPullDown;
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+struct Pin<State = NonConfigured> {
+    state: core::marker::PhantomData<State>,
+}
+
+impl Pin<NonConfigured> {
+    fn new() -> Self {
+        Pin {
+            state: core::marker::PhantomData::<NonConfigured>,
+        }
+    }
+    fn set_pin_output(&mut self) -> Pin<Output> {
+        Pin {
+            state: core::marker::PhantomData::<Output>,
+        }
+    }
+    fn set_pin_input_pullup(&mut self) -> Pin<InputPullUp> {
+        Pin {
+            state: core::marker::PhantomData::<InputPullUp>,
+        }
+    }
+    fn set_pin_input_pulldown(&mut self) -> Pin<InputPullDown> {
+        Pin {
+            state: core::marker::PhantomData::<InputPullDown>,
+        }
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+struct Port<State = NonConfigured> {
+    pin0: Pin<State>,
+    pin1: Pin<State>,
+    pin2: Pin<State>,
+    pin3: Pin<State>,
+    pin4: Pin<State>,
+    pin5: Pin<State>,
+    pin6: Pin<State>,
+    pin7: Pin<State>,
+    state: core::marker::PhantomData<State>,
+}
+
+impl Port<NonConfigured> {
+    pub fn new() -> Self {
+        Port {
+            pin0: Pin::new(),
+            pin1: Pin::new(),
+            pin2: Pin::new(),
+            pin3: Pin::new(),
+            pin4: Pin::new(),
+            pin5: Pin::new(),
+            pin6: Pin::new(),
+            pin7: Pin::new(),
+            state: core::marker::PhantomData::<NonConfigured>,
+        }
+    }
+
+    pub fn port_as_output(&mut self) -> Result<Port<Output>, Error> {
+        let port = Port {
+            state: core::marker::PhantomData::<Output>,
+            pin0: Pin::new().set_pin_output(),
+            pin1: Pin::new().set_pin_output(),
+            pin2: Pin::new().set_pin_output(),
+            pin3: Pin::new().set_pin_output(),
+            pin4: Pin::new().set_pin_output(),
+            pin5: Pin::new().set_pin_output(),
+            pin6: Pin::new().set_pin_output(),
+            pin7: Pin::new().set_pin_output(),
+        };
+        Ok(port)
     }
 }
 
@@ -95,17 +187,23 @@ trait Operation<I2C, E> {
 
 pub struct Mcp23017 {
     address: Option<u8>,
+    porta: Option<Port>,
+    portb: Option<Port>,
 }
 
 impl Default for Mcp23017 {
     fn default() -> Self {
-        Self::new()
+        Self::new(Some(DEFAULT_ADDRESS))
     }
 }
 
 impl Mcp23017 {
-    pub fn new() -> Self {
-        Mcp23017 { address: None }
+    pub fn new(address: Option<u8>) -> Self {
+        Mcp23017 {
+            address,
+            porta: None,
+            portb: None,
+        }
     }
 
     pub fn set_address(&mut self, address: u8) -> &mut Self {
@@ -129,19 +227,13 @@ impl<I2C, E> Operation<I2C, E> for Mcp23017
 where
     I2C: WriteRead<Error = E> + Write<Error = E>,
 {
-    fn write(&mut self, i2c: &mut I2C, register: Register, buf: &mut [u8; 2]) -> Result<(), Error>
-    where
-        I2C: WriteRead<Error = E> + Write<Error = E>,
-    {
+    fn write(&mut self, i2c: &mut I2C, register: Register, buf: &mut [u8; 2]) -> Result<(), Error> {
         let address = self.address.unwrap();
         let _ = i2c.write(address, &[register as u8, buf[1], buf[0]]);
         Ok(())
     }
 
-    fn read(&mut self, i2c: &mut I2C, register: Register) -> Result<[u8; 2], Error>
-    where
-        I2C: WriteRead<Error = E> + Write<Error = E>,
-    {
+    fn read(&mut self, i2c: &mut I2C, register: Register) -> Result<[u8; 2], Error> {
         let mut rx_buffer: [u8; 2] = [0; 2];
         let address = self.address.unwrap();
 
@@ -160,8 +252,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    fn new_pin_test() {
+        let mut pin0 = Pin::new();
+        assert_eq!(pin0.state, core::marker::PhantomData::<NonConfigured>);
+        let pin0 = pin0.set_pin_output();
+        assert_eq!(pin0.state, core::marker::PhantomData::<Output>);
+        let pin1 = Pin::new().set_pin_input_pullup();
+        assert_eq!(pin1.state, core::marker::PhantomData::<InputPullUp>);
+        let pin2 = Pin::new().set_pin_input_pulldown();
+        assert_eq!(pin2.state, core::marker::PhantomData::<InputPullDown>);
     }
 }
