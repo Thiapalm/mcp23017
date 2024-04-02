@@ -21,3 +21,9 @@ rtt-target = "0.5"
 pretty_assertions = "1"
 embedded-hal-mock = "0.10.0"
 float-cmp = "0.9.0"
+
+[features]
+default = ["pinmode"]
+chipmode = []
+portmode = []
+pinmode = []

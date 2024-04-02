@@ -3,14 +3,21 @@
 /////// Imports
 
 //use byteorder::{BigEndian, ByteOrder};
-use byteorder::{ByteOrder, LittleEndian};
+//use byteorder::{ByteOrder, LittleEndian};
 use core::fmt::Display;
 use embedded_hal::i2c;
+
+#[cfg(feature = "chipmode")]
+mod chipmode;
+#[cfg(feature = "pinmode")]
+mod pinmode;
+#[cfg(feature = "portmode")]
+mod portmode;
 //use rtt_target::rprintln;
 
 //const DEFAULT_ADDRESS: u8 = 0x20; // Default address
 #[allow(dead_code)]
-pub enum Register {
+enum Register {
     Iodir = 0x00,
     Ipol = 0x02,
     Gpinten = 0x04,
@@ -34,6 +41,7 @@ enum PinMask {
     Pin5 = 0x20,
     Pin6 = 0x40,
     Pin7 = 0x80,
+    Invalid = 0x00,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -86,21 +94,26 @@ pub enum Error {
     InvalidInterruptSetting,
 }
 
-#[derive(Debug)]
+////// STATES ////////
+#[derive(Debug, Clone)]
 pub struct Configuring;
-#[derive(Debug)]
-pub struct ChipMode;
-#[derive(Debug)]
-pub struct PortMode;
-#[derive(Debug)]
-pub struct PinMode;
 
+#[derive(Debug, Clone)]
+pub struct OutputReady;
+
+#[derive(Debug, Clone)]
+pub struct InputConfiguring;
+
+#[derive(Debug, Clone)]
+pub struct InputReady;
+
+/* #[derive(Debug, Clone)]
 pub struct Mcp23017<I2C, State = Configuring> {
     i2c: I2C,
     address: u8,
     state: core::marker::PhantomData<State>,
 }
-
+ */
 pub enum InterruptOn {
     PinChange = 0,
     ChangeFromRegister = 1,
@@ -125,16 +138,18 @@ fn pin_number_to_mask(pin: PinNumber) -> PinMask {
     }
 }
 
-fn pin_mask_to_number(pin: PinMask) -> PinNumber {
+#[allow(dead_code)]
+fn pin_mask_to_number(pin: PinMask) -> Option<PinNumber> {
     match pin {
-        PinMask::Pin0 => PinNumber::Pin0,
-        PinMask::Pin1 => PinNumber::Pin1,
-        PinMask::Pin2 => PinNumber::Pin2,
-        PinMask::Pin3 => PinNumber::Pin3,
-        PinMask::Pin4 => PinNumber::Pin4,
-        PinMask::Pin5 => PinNumber::Pin5,
-        PinMask::Pin6 => PinNumber::Pin6,
-        PinMask::Pin7 => PinNumber::Pin7,
+        PinMask::Pin0 => Some(PinNumber::Pin0),
+        PinMask::Pin1 => Some(PinNumber::Pin1),
+        PinMask::Pin2 => Some(PinNumber::Pin2),
+        PinMask::Pin3 => Some(PinNumber::Pin3),
+        PinMask::Pin4 => Some(PinNumber::Pin4),
+        PinMask::Pin5 => Some(PinNumber::Pin5),
+        PinMask::Pin6 => Some(PinNumber::Pin6),
+        PinMask::Pin7 => Some(PinNumber::Pin7),
+        PinMask::Invalid => None,
     }
 }
 
@@ -173,10 +188,12 @@ pub fn convert_slave_address(a0: SlaveAddressing, a1: SlaveAddressing, a2: Slave
     }
 }
 
-/////// Traits
-pub trait Configuration {
+trait RegReadWrite {
     fn write_config(&mut self, register: Register, port: MyPort, value: u8) -> Result<(), Error>;
     fn read_config(&mut self, register: Register, port: MyPort) -> Result<u8, Error>;
+}
+/////// Traits
+pub trait Configuration {
     fn set_pin_dir(
         &mut self,
         port: MyPort,
@@ -187,7 +204,7 @@ pub trait Configuration {
 }
 
 pub trait Interrupts {
-    fn find_interrupted_pin(&mut self, port: MyPort) -> PinNumber; //Read INTF register
+    fn find_interrupted_pin(&mut self, port: MyPort) -> Option<PinNumber>; //Read INTF register
     fn set_mirror(&mut self, mirror: InterruptMirror) -> Result<(), Error>; //Set IOCON.MIRROR Return error only on comm failure
     fn set_interrupt_on(
         &mut self,
@@ -230,7 +247,7 @@ impl From<u8> for PinMask {
             0x20 => PinMask::Pin5,
             0x40 => PinMask::Pin6,
             0x80 => PinMask::Pin7,
-            _ => PinMask::Pin0,
+            _ => PinMask::Invalid,
         }
     }
 }
@@ -259,14 +276,7 @@ impl Display for SlaveAddressing {
     }
 }
 
-// impl Default for Mcp23017<I2C, State> {
-//     fn default() -> Self {
-
-//     }
-
-// }
-
-impl<I2C, E, State> Mcp23017<I2C, State>
+/* impl<I2C, E, State> Mcp23017<I2C, State>
 where
     I2C: i2c::I2c<Error = E>,
 {
@@ -279,7 +289,7 @@ where
     }
 }
 
-impl<I2C, E> Configuration for Mcp23017<I2C>
+impl<I2C, E, State> RegReadWrite for Mcp23017<I2C, State>
 where
     I2C: i2c::I2c<Error = E>,
 {
@@ -299,107 +309,84 @@ where
             .map_err(i2c_comm_error)?;
         Ok(())
     }
+}
 
-    fn set_pin_dir(
-        &mut self,
-        port: MyPort,
-        pin: PinNumber,
-        direction: Direction,
-    ) -> Result<(), Error> {
-        let mut value = self.read_config(Register::Iodir, port).unwrap();
 
-        value = match direction {
-            Direction::Input => bit_set(value, pin),
-            Direction::Output => bit_clear(value, pin),
-        };
+#[allow(dead_code)]
+impl<I2C, E> Mcp23017<I2C, Configuring>
+where
+    I2C: i2c::I2c<Error = E>,
+{
+    pub fn set_as_input(mut self) -> Result<Mcp23017<I2C, InputConfiguring>, Error> {
+        self.write_config(Register::Iodir, MyPort::Porta, 0xFF)?;
+        self.write_config(Register::Iodir, MyPort::Portb, 0xFF)?;
 
-        self.write_config(Register::Iodir, port, value)
+        Ok(Mcp23017 {
+            i2c: self.i2c,
+            address: self.address,
+            state: core::marker::PhantomData::<InputConfiguring>,
+        })
     }
 
-    fn set_pull(&mut self, port: MyPort, pin: PinNumber, pull: PinSet) -> Result<(), Error> {
-        let mut pin_is_output = self.read_config(Register::Iodir, port)?;
-        pin_is_output = bit_read(pin_is_output, pin);
+    pub fn set_as_output(mut self) -> Result<Mcp23017<I2C, OutputReady>, Error> {
+        self.write_config(Register::Iodir, MyPort::Porta, 0x00)?;
+        self.write_config(Register::Iodir, MyPort::Portb, 0x00)?;
 
-        if pin_is_output == Direction::Output as u8 {
-            return Err(Error::PinIsNotInput);
-        }
+        Ok(Mcp23017 {
+            i2c: self.i2c,
+            address: self.address,
+            state: core::marker::PhantomData::<OutputReady>,
+        })
+    }
 
-        let result = self.read_config(Register::Gppu, port)?;
+}
 
-        let result = match pull {
+impl<I2C, E> Mcp23017<I2C, OutputReady>
+where
+    I2C: i2c::I2c<Error = E>,
+{
+    pub fn write(&mut self, value: u16) -> Result<(), Error> {
+        let register_address = Register::Gpio as u8;
+        let bytes = value.to_be_bytes();
+        self.i2c
+            .write(self.address, &[register_address, bytes[0], bytes[1]])
+            .map_err(i2c_comm_error)?;
+        Ok(())
+    }
+
+    pub fn write_pin(&mut self, port: MyPort, pin: PinNumber, value: PinSet) -> Result<(), Error> {
+        let mut result = self.read_config(Register::Gpio, port)?;
+
+        result = match value {
             PinSet::High => bit_set(result, pin),
             PinSet::Low => bit_clear(result, pin),
         };
 
-        self.write_config(Register::Gppu, port, result)
+        let register_address = Register::Gpio as u8;
+
+        self.i2c
+            .write(self.address, &[register_address, result])
+            .map_err(i2c_comm_error)?;
+        Ok(())
     }
 }
 
-impl<I2C, E> Interrupts for Mcp23017<I2C>
+impl<I2C, E> Mcp23017<I2C, InputConfiguring>
 where
     I2C: i2c::I2c<Error = E>,
 {
-    fn find_interrupted_pin(&mut self, port: MyPort) -> PinNumber {
-        let pin_msk = self.read_config(Register::Intf, port).unwrap();
-
-        pin_mask_to_number(PinMask::from(pin_msk))
-    }
-
-    fn set_interrupt_on(
-        &mut self,
-        port: MyPort,
-        pin: PinNumber,
-        interrupt_on: InterruptOn,
-    ) -> Result<(), Error> {
-        let mut reg = self.read_config(Register::Intcon, port)?;
-
-        reg = match interrupt_on {
-            InterruptOn::PinChange => bit_clear(reg, pin),
-            InterruptOn::ChangeFromRegister => bit_set(reg, pin),
+    pub fn set_pull(&mut self, pull: PinSet) -> Result<&mut Self, Error> {
+        let result = match pull {
+            PinSet::High => 0xFF,
+            PinSet::Low => 0x00,
         };
 
-        self.write_config(Register::Intcon, port, reg)
+        self.write_config(Register::Gppu, MyPort::Porta, result)?;
+        self.write_config(Register::Gppu, MyPort::Portb, result)?;
+        Ok(self)
     }
 
-    fn set_interrupt_compare(
-        &mut self,
-        port: MyPort,
-        pin: PinNumber,
-        value: PinSet,
-    ) -> Result<(), Error> {
-        let intcon = self.read_config(Register::Intcon, port)?;
-
-        if bit_read(intcon, pin) != 1 {
-            return Err(Error::InvalidInterruptSetting);
-        }
-
-        let mut reg = self.read_config(Register::Defval, port)?; //change only valid if intcon is set to 1
-
-        reg = match value {
-            PinSet::High => bit_set(reg, pin),
-            PinSet::Low => bit_clear(reg, pin),
-        };
-
-        self.write_config(Register::Defval, port, reg)
-    }
-
-    fn disable_interrupt(&mut self, port: MyPort, pin: PinNumber) -> Result<(), Error> {
-        let mut reg = self.read_config(Register::Gpinten, port)?;
-
-        reg = bit_clear(reg, pin);
-
-        self.write_config(Register::Gpinten, port, reg)
-    }
-
-    fn enable_interrupt(&mut self, port: MyPort, pin: PinNumber) -> Result<(), Error> {
-        //todo Set GPINTEN, only valid if DEFVAL and INTCON already configured
-        let mut reg = self.read_config(Register::Gpinten, port)?;
-
-        reg = bit_set(reg, pin);
-        self.write_config(Register::Gpinten, port, reg)
-    }
-
-    fn set_mirror(&mut self, mirror: InterruptMirror) -> Result<(), Error> {
+    pub fn set_interrupt_mirror(&mut self, mirror: InterruptMirror) -> Result<&mut Self, Error> {
         let mut rega = self.read_config(Register::Iocon, MyPort::Porta)?;
         let mut regb = self.read_config(Register::Iocon, MyPort::Portb)?;
 
@@ -416,78 +403,64 @@ where
 
         self.write_config(Register::Iocon, MyPort::Porta, rega)?;
 
-        self.write_config(Register::Iocon, MyPort::Portb, regb)
-    }
-}
-
-#[allow(dead_code)]
-impl<I2C, E> Mcp23017<I2C, Configuring>
-where
-    I2C: i2c::I2c<Error = E>,
-{
-    fn port_mode(self) -> Mcp23017<I2C, PortMode> {
-        Mcp23017 {
-            i2c: self.i2c,
-            address: self.address,
-            state: core::marker::PhantomData::<PortMode>,
-        }
+        self.write_config(Register::Iocon, MyPort::Portb, regb)?;
+        Ok(self)
     }
 
-    fn pin_mode(self) -> Mcp23017<I2C, PinMode> {
-        Mcp23017 {
-            i2c: self.i2c,
-            address: self.address,
-            state: core::marker::PhantomData::<PinMode>,
-        }
-    }
+    pub fn set_interrupt_on(
+        &mut self,
+        port: MyPort,
+        pin: PinNumber,
+        interrupt_on: InterruptOn,
+    ) -> Result<&mut Self, Error> {
+        let mut reg = self.read_config(Register::Intcon, port)?;
 
-    fn chip_mode(self) -> Mcp23017<I2C, ChipMode> {
-        Mcp23017 {
-            i2c: self.i2c,
-            address: self.address,
-            state: core::marker::PhantomData::<ChipMode>,
-        }
-    }
-}
-
-impl<I2C, E> MyOutput for Mcp23017<I2C>
-where
-    I2C: i2c::I2c<Error = E>,
-{
-    fn write(&mut self, value: u16) -> Result<(), Error> {
-        let register_address = Register::Gpio as u8;
-        let bytes = value.to_be_bytes();
-        self.i2c
-            .write(self.address, &[register_address, bytes[0], bytes[1]])
-            .map_err(i2c_comm_error)?;
-        Ok(())
-    }
-
-    fn write_port(&mut self, port: MyPort, value: u8) -> Result<(), Error> {
-        let register_address = Register::Gpio as u8 | port as u8;
-        self.i2c
-            .write(self.address, &[register_address, value])
-            .map_err(i2c_comm_error)?;
-        Ok(())
-    }
-
-    fn write_pin(&mut self, port: MyPort, pin: PinNumber, value: PinSet) -> Result<(), Error> {
-        let mut final_value = self.read_port(port).unwrap();
-
-        final_value = match value {
-            PinSet::High => bit_set(final_value, pin),
-            PinSet::Low => bit_clear(final_value, pin),
+        reg = match interrupt_on {
+            InterruptOn::PinChange => bit_clear(reg, pin),
+            InterruptOn::ChangeFromRegister => bit_set(reg, pin),
         };
 
-        self.write_port(port, final_value)
+        self.write_config(Register::Intcon, port, reg)?;
+        Ok(self)
+    }
+
+    pub fn set_interrupt_compare(
+        &mut self,
+        port: MyPort,
+        pin: PinNumber,
+        value: PinSet,
+    ) -> Result<&mut Self, Error> {
+        let intcon = self.read_config(Register::Intcon, port)?;
+
+        if bit_read(intcon, pin) != 1 {
+            return Err(Error::InvalidInterruptSetting);
+        }
+
+        let mut reg = self.read_config(Register::Defval, port)?; //change only valid if intcon is set to 1
+
+        reg = match value {
+            PinSet::High => bit_set(reg, pin),
+            PinSet::Low => bit_clear(reg, pin),
+        };
+
+        self.write_config(Register::Defval, port, reg)?;
+        Ok(self)
+    }
+
+    pub fn ready(self) -> Mcp23017<I2C, InputReady> {
+        Mcp23017 {
+            i2c: self.i2c,
+            address: self.address,
+            state: core::marker::PhantomData::<InputReady>,
+        }
     }
 }
 
-impl<I2C, E> MyInput for Mcp23017<I2C>
+impl<I2C, E> Mcp23017<I2C, InputReady>
 where
     I2C: i2c::I2c<Error = E>,
 {
-    fn read(&mut self) -> Result<u16, Error> {
+    pub fn read(&mut self) -> Result<u16, Error> {
         let register_address = Register::Gpio as u8;
         let mut rx_buffer: [u8; 2] = [0; 2];
         self.i2c
@@ -496,22 +469,36 @@ where
         Ok(LittleEndian::read_u16(&rx_buffer))
     }
 
-    fn read_port(&mut self, port: MyPort) -> Result<u8, Error> {
+    pub fn read_pin(&mut self, port: MyPort, pin: PinNumber) -> Result<u8, Error> {
         let register_address = Register::Gpio as u8 | port as u8;
         let mut rx_buffer: [u8; 1] = [0; 1];
         self.i2c
             .write_read(self.address, &[register_address], &mut rx_buffer)
             .map_err(i2c_comm_error)?;
-        Ok(rx_buffer[0])
+        Ok(bit_read(rx_buffer[0], pin))
     }
 
-    fn read_pin(&mut self, port: MyPort, pin: PinNumber) -> Result<u8, Error> {
-        let mut result = self.read_port(port).unwrap();
+    pub fn disable_interrupt(&mut self, port: MyPort, pin: PinNumber) -> Result<(), Error> {
+        let mut reg = self.read_config(Register::Gpinten, port)?;
 
-        result = bit_read(result, pin);
-        Ok(result)
+        reg = bit_clear(reg, pin);
+
+        self.write_config(Register::Gpinten, port, reg)
     }
-}
+
+    pub fn enable_interrupt(&mut self, port: MyPort, pin: PinNumber) -> Result<(), Error> {
+        let mut reg = self.read_config(Register::Gpinten, port)?;
+
+        reg = bit_set(reg, pin);
+        self.write_config(Register::Gpinten, port, reg)
+    }
+
+    pub fn get_interrupted_pin(&mut self, port: MyPort) -> Option<PinNumber> {
+        let pin_msk = self.read_config(Register::Intf, port).unwrap();
+
+        pin_mask_to_number(PinMask::from(pin_msk))
+    }
+} */
 
 /////// Tests
 
@@ -521,7 +508,10 @@ mod tests {
 
     use super::*;
     use crate::bit_read;
+    extern crate embedded_hal_mock;
     extern crate std;
+    use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
+    use float_cmp::approx_eq;
 
     #[test]
     fn test_bit_set() {
@@ -551,5 +541,14 @@ mod tests {
 
         println!("value 0b{:08b}", value);
         assert_eq!(0b00000001, value);
+    }
+
+    #[test]
+    fn test_new2() {
+        let expectations = [
+            I2cTransaction::write_read(0x40, vector1(0xFF), vector2(3, 4))
+                .with_error(embedded_hal::i2c::ErrorKind::Other),
+        ];
+        let mut i2c = I2cMock::new(&expectations);
     }
 }
