@@ -79,22 +79,6 @@ pub fn output_open_drain() -> OpenDrain {
     OpenDrain
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct Code {
-    pub future: Result<bool, core::fmt::Error>,
-}
-fn the_future_is_here() -> Result<bool, core::fmt::Error> {
-    Ok(true)
-}
-#[allow(non_snake_case, unused_variables, dead_code)]
-pub fn New_channel() {
-    let mut Lab = Code { future: Ok(false) };
-
-    Lab.future = the_future_is_here();
-
-    let i_will_make_it = Lab.future.unwrap_or(true); // make it anyway
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
