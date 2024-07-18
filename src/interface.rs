@@ -2,8 +2,8 @@
 use crate::registers::*;
 
 pub trait RegReadWrite {
-    fn write_config(&mut self, register: Register, port: MyPort, value: u8) -> Result<(), Error>;
-    fn read_config(&mut self, register: Register, port: MyPort) -> Result<u8, Error>;
+    fn write_config(&mut self, register: Register, value: u16) -> Result<(), Error>;
+    fn read_config(&mut self, register: Register) -> Result<u16, Error>;
 }
 /////// Traits
 pub trait Configuration {

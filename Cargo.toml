@@ -6,9 +6,9 @@ author = ["Thiago Palmieri <palmieri@adastra.aleeas.com>"]
 keywords = ["analog", "driver", "i2c", "embedded-hal-driver"]
 categories = ["embedded", "hardware-support", "no-std"]
 license = "MIT OR Apache-2.0"
-description = "Rust Driver for device INA226 High-Side or Low-Side Measurement, Bi-Direcional Current and Power Monitor"
+description = "Rust Driver for device MCP23017 16-Bit I2C I/O Expander with Serial Interface"
 readme = "README.md"
-repository = "https://github.com/Thiapalm/ina226"
+repository = "https://github.com/Thiapalm/mcp23017"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

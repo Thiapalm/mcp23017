@@ -16,6 +16,7 @@ pub struct InputConfiguring;
 #[derive(Debug, Clone)]
 pub struct InputReady;
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Register {
     Iodir = 0x00,
     Ipol = 0x02,
@@ -81,7 +82,7 @@ pub enum Direction {
 }
 
 ///Valid error codes
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Error {
     CommunicationErr,
     InvalidParameter,
@@ -103,6 +104,9 @@ pub enum InterruptMirror {
     MirrorOff = 0b10111111,
 }
 
+/**
+ * Function implements the From trait into PinMask enum
+ */
 impl From<u8> for PinMask {
     fn from(value: u8) -> Self {
         match value {
@@ -119,6 +123,9 @@ impl From<u8> for PinMask {
     }
 }
 
+/**
+ * Function implements the Display trait into Error enum
+ */
 impl Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -134,6 +141,42 @@ impl Display for Error {
     }
 }
 
+/**
+ * Function implements the Display trait into Register enum
+ */
+impl Display for Register {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Register::Iodir => write!(f, "Iodir (0x00)"),
+            Register::Ipol => write!(f, "Ipol (0x02)"),
+            Register::Gpinten => write!(f, "Gpinten (0x04)"),
+            Register::Defval => write!(f, "Defval (0x06)"),
+            Register::Intcon => write!(f, "Intcon (0x08)"),
+            Register::Iocon => write!(f, "Iocon (0x0A)"),
+            Register::Gppu => write!(f, "Gppu (0x0C)"),
+            Register::Intf => write!(f, "Intf (0x0E)"),
+            Register::Intcap => write!(f, "Intcap (0x10)"),
+            Register::Gpio => write!(f, "Gpio (0x12)"),
+            Register::Olat => write!(f, "Olat (0x14)"),
+        }
+    }
+}
+
+/**
+ * Function implements the Display trait into Myport enum
+ */
+impl Display for MyPort {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            MyPort::Porta => write!(f, "Porta (0x00)"),
+            MyPort::Portb => write!(f, "Portb (0x01)"),
+        }
+    }
+}
+
+/**
+ * Function implements the Display trait into SlaveAddressing enum
+ */
 impl Display for SlaveAddressing {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -150,6 +193,9 @@ pub fn i2c_comm_error<E>(_: E) -> Error {
     Error::CommunicationErr
 }
 
+/**
+ * Function used to convert a pin number to a pin mask
+ */
 pub fn pin_number_to_mask(pin: PinNumber) -> PinMask {
     match pin {
         PinNumber::Pin0 => PinMask::Pin0,
@@ -163,7 +209,9 @@ pub fn pin_number_to_mask(pin: PinNumber) -> PinMask {
     }
 }
 
-#[allow(dead_code)]
+/**
+ * This function converts a pin mask to a pin number
+ */
 pub fn pin_mask_to_number(pin: PinMask) -> Option<PinNumber> {
     match pin {
         PinMask::Pin0 => Some(PinNumber::Pin0),
@@ -178,14 +226,26 @@ pub fn pin_mask_to_number(pin: PinMask) -> Option<PinNumber> {
     }
 }
 
+/**
+ * This function is used to set a given bit. It must receive the byte to be changed
+ * and the pin number to set
+ */
 pub fn bit_set(byte: u8, pin: PinNumber) -> u8 {
     byte | (pin_number_to_mask(pin) as u8)
 }
 
+/**
+ * This function is used to clear a given bit. It must receive the byte to be changed
+ * and the pin number to be cleared
+ */
 pub fn bit_clear(byte: u8, pin: PinNumber) -> u8 {
     byte & !(pin_number_to_mask(pin) as u8)
 }
 
+/**
+ * This function reads a given bit from a byte. It must receive the byte and
+ * the pin number to be read
+ */
 pub fn bit_read(byte: u8, pin: PinNumber) -> u8 {
     (byte & (pin_number_to_mask(pin) as u8)) >> (pin as u8)
 }
