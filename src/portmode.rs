@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use crate::interface::*;
+use crate::prelude::*;
 use crate::registers::*;
 use MyPort::Porta as porta;
 use MyPort::Portb as portb;
@@ -10,8 +10,6 @@ use byteorder::{ByteOrder, LittleEndian};
 use embedded_hal::i2c::I2c;
 #[cfg(feature = "async")]
 use embedded_hal_async::i2c::I2c;
-
-use rtt_target::rprintln;
 
 trait Regread {
     fn read_config(&mut self, register: Register) -> Result<u8, Error>;
@@ -36,6 +34,9 @@ macro_rules! create_port {
         where
             I2C: I2c<Error = E>,
         {
+            /**
+             * Function used to create a new handler for chip/port/pin
+             */
             #[inline]
             pub fn new(i2c: I2C, address: u8) -> Self {
                 $port_name {
@@ -59,6 +60,9 @@ macro_rules! read_write {
         where
             I2C: I2c<Error = E>,
         {
+            /**
+             * Private function used to read the chip registers using i2c
+             */
             #[inline]
             async fn read_config(&mut self, register: Register) -> Result<u8, Error> {
                 let register_address = register as u8 | self.port as u8;
@@ -71,6 +75,9 @@ macro_rules! read_write {
                 Ok(rx_buffer[0])
             }
 
+            /**
+             * Private function used to write the chip registers using i2c
+             */
             #[inline]
             async fn write_config(&mut self, register: Register, value: u8) -> Result<(), Error> {
                 let register_address = register as u8 | self.port as u8;
@@ -96,6 +103,9 @@ macro_rules! set_as {
         where
             I2C: I2c<Error = E>,
         {
+            /**
+             * Function used to set the chip/port/pin as input
+             */
             #[inline]
             pub async fn set_as_input(
                 mut self,
@@ -111,6 +121,9 @@ macro_rules! set_as {
                 })
             }
 
+            /**
+             * Function used to set the chip/port/pin as output
+             */
             #[inline]
             pub async fn set_as_output(mut self) -> Result<$port_name<I2C, OutputReady>, Error> {
                 self.write_config(Register::Iodir, 0x00)
@@ -137,6 +150,9 @@ macro_rules! outputready {
         where
             I2C: I2c<Error = E>,
         {
+            /**
+             * Function used to write the output value to be set on chip/port/pin
+             */
             #[inline]
             pub async fn write(&mut self, value: u8) -> Result<(), Error> {
                 let register_address = Register::Gpio as u8 | self.port as u8;
@@ -145,6 +161,9 @@ macro_rules! outputready {
                 Ok(())
             }
 
+            /**
+             * Function used to write the output value to be set on pin
+             */
             #[inline]
             pub async fn write_pin(&mut self, pin: PinNumber, value: PinSet) -> Result<(), Error> {
                 let mut result = self.read_config(Register::Gpio).await?;
@@ -172,6 +191,9 @@ macro_rules! inputready {
         where
             I2C: I2c<Error = E>,
         {
+            /**
+             * Function used to read the input
+             */
             #[inline]
             pub async fn read(&mut self) -> Result<u8, Error> {
 
@@ -180,12 +202,18 @@ macro_rules! inputready {
                 Ok(result)
             }
 
+            /**
+             * Function used to read the input pin
+             */
             #[inline]
             pub async fn read_pin(&mut self, pin: PinNumber) -> Result<u8, Error> {
                 let result = self.read().await?;
                 Ok(bit_read(result, pin))
             }
 
+            /**
+             * Function used to disable the interrupt on the input
+             */
             #[inline]
             pub async fn disable_interrupt(&mut self, pin: PinNumber) -> Result<(), Error> {
                 let mut reg = self.read_config(Register::Gpinten).await?;
@@ -195,6 +223,9 @@ macro_rules! inputready {
                 self.write_config(Register::Gpinten, reg).await
             }
 
+            /**
+             * Function used to enable the interrupt on the input
+             */
             #[inline]
             pub async fn enable_interrupt(
                 &mut self,
@@ -206,6 +237,9 @@ macro_rules! inputready {
                 self.write_config(Register::Gpinten, reg).await
             }
 
+            /**
+             * Function used to verify the interrupt on the input
+             */
             #[inline]
             pub async fn get_interrupted_pin(&mut self) -> Option<PinNumber> {
                 let pin_msk = self.read_config(Register::Intf).await.unwrap_or(0);
@@ -226,6 +260,9 @@ macro_rules! inputconfiguring {
         where
             I2C: I2c<Error = E>,
         {
+            /**
+             * Function used to set the pull on the input
+             */
             #[inline]
             pub async fn set_pull(mut self, pull: PinSet) -> Result<Self, Error> {
                 let result = match pull {
@@ -238,6 +275,9 @@ macro_rules! inputconfiguring {
                 Ok(self)
             }
 
+            /**
+             * Function used to set the interrupt mirror function on the input
+             */
             #[inline]
             pub async fn set_interrupt_mirror(
                 mut self,
@@ -260,6 +300,9 @@ macro_rules! inputconfiguring {
                 Ok(self)
             }
 
+            /**
+             * Function used to choose the pin as interrupt on the input
+             */
             #[inline]
             pub async fn set_interrupt_on(
                 mut self,
@@ -277,6 +320,9 @@ macro_rules! inputconfiguring {
                 Ok(self)
             }
 
+            /**
+             * Function used to set the interrupt compare function on the input
+             */
             #[inline]
             pub async fn set_interrupt_compare(
                 mut self,
@@ -300,6 +346,9 @@ macro_rules! inputconfiguring {
                 Ok(self)
             }
 
+            /**
+             * Function used to set input to the ready state
+             */
             #[inline]
             pub fn ready(mut self) -> $port_name<I2C, InputReady> {
                 $port_name {

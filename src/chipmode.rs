@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use crate::interface::*;
+use crate::prelude::*;
 use crate::registers::*;
 use byteorder::{ByteOrder, LittleEndian};
 #[cfg(not(feature = "async"))]
@@ -15,10 +15,18 @@ pub struct MCP23017<I2C, State = Configuring> {
     state: core::marker::PhantomData<State>,
 }
 
+trait RegReadWrite {
+    fn write_config(&mut self, register: Register, value: u16) -> Result<(), Error>;
+    fn read_config(&mut self, register: Register) -> Result<u16, Error>;
+}
+
 impl<I2C, E, State> MCP23017<I2C, State>
 where
     I2C: I2c<Error = E>,
 {
+    /**
+     * Function used to create a new handler for chip/port/pin
+     */
     #[inline]
     pub fn new(i2c: I2C, address: u8) -> Self {
         MCP23017 {
@@ -37,6 +45,9 @@ impl<I2C, E, State> RegReadWrite for MCP23017<I2C, State>
 where
     I2C: I2c<Error = E>,
 {
+    /**
+     * Private function used to read the chip registers using i2c
+     */
     #[inline]
     async fn read_config(&mut self, register: Register) -> Result<u16, Error> {
         let register_address = register as u8;
@@ -48,6 +59,9 @@ where
         Ok(LittleEndian::read_u16(&rx_buffer))
     }
 
+    /**
+     * Private function used to write the chip registers using i2c
+     */
     #[inline]
     async fn write_config(&mut self, register: Register, value: u16) -> Result<(), Error> {
         let register_address = register as u8;
@@ -56,8 +70,8 @@ where
                 self.address,
                 &[
                     register_address,
-                    value.to_be_bytes()[0],
-                    value.to_be_bytes()[1],
+                    value.to_le_bytes()[0],
+                    value.to_le_bytes()[1],
                 ],
             )
             .await
@@ -75,6 +89,9 @@ impl<I2C, E> MCP23017<I2C, Configuring>
 where
     I2C: I2c<Error = E>,
 {
+    /**
+     * Function used to set the chip/port/pin as input
+     */
     #[inline]
     pub async fn set_as_input(mut self) -> Result<MCP23017<I2C, InputConfiguring>, Error> {
         self.write_config(Register::Iodir, 0xFFFF).await?;
@@ -86,6 +103,9 @@ where
         })
     }
 
+    /**
+     * Function used to set the chip/port/pin as output
+     */
     #[inline]
     pub async fn set_as_output(mut self) -> Result<MCP23017<I2C, OutputReady>, Error> {
         self.write_config(Register::Iodir, 0x0000).await?;
@@ -106,6 +126,9 @@ impl<I2C, E> MCP23017<I2C, OutputReady>
 where
     I2C: I2c<Error = E>,
 {
+    /**
+     * Function used to write the output value to be set on chip/port/pin
+     */
     #[inline]
     pub async fn write(&mut self, value: u16) -> Result<(), Error> {
         self.write_config(Register::Gpio, value)
@@ -114,6 +137,9 @@ where
         Ok(())
     }
 
+    /**
+     * Function used to write the output value to be set on pin
+     */
     #[inline]
     pub async fn write_pin(
         &mut self,
@@ -158,6 +184,9 @@ impl<I2C, E> MCP23017<I2C, InputConfiguring>
 where
     I2C: I2c<Error = E>,
 {
+    /**
+     * Function used to set the pull on the input
+     */
     #[inline]
     pub async fn set_pull(mut self, pull: PinSet) -> Result<Self, Error> {
         let result = match pull {
@@ -170,6 +199,9 @@ where
         Ok(self)
     }
 
+    /**
+     * Function used to set the interrupt mirror function on the input
+     */
     #[inline]
     pub async fn set_interrupt_mirror(mut self, mirror: InterruptMirror) -> Result<Self, Error> {
         let mut reg = self.read_config(Register::Iocon).await?;
@@ -192,6 +224,9 @@ where
         Ok(self)
     }
 
+    /**
+     * Function used to choose the pin as interrupt on the input
+     */
     #[inline]
     pub async fn set_interrupt_on(
         mut self,
@@ -225,6 +260,9 @@ where
         Ok(self)
     }
 
+    /**
+     * Function used to set the interrupt compare function on the input
+     */
     #[inline]
     pub async fn set_interrupt_compare(
         mut self,
@@ -269,6 +307,9 @@ where
         Ok(self)
     }
 
+    /**
+     * Function used to set input to the ready state
+     */
     #[inline]
     pub fn ready(mut self) -> MCP23017<I2C, InputReady> {
         MCP23017 {
@@ -287,6 +328,9 @@ impl<I2C, E> MCP23017<I2C, InputReady>
 where
     I2C: I2c<Error = E>,
 {
+    /**
+     * Function used to read the input
+     */
     #[inline]
     pub async fn read(&mut self) -> Result<u16, Error> {
         let mut reg = self
@@ -296,6 +340,9 @@ where
         Ok(reg)
     }
 
+    /**
+     * Function used to read the input pin
+     */
     #[inline]
     pub async fn read_pin(&mut self, port: MyPort, pin: PinNumber) -> Result<u8, Error> {
         let mut result = self.read().await?.to_be_bytes();
@@ -308,6 +355,9 @@ where
         Ok(result)
     }
 
+    /**
+     * Function used to disable the interrupt on the input
+     */
     #[inline]
     pub async fn disable_interrupt(&mut self, port: MyPort, pin: PinNumber) -> Result<(), Error> {
         let mut reg = self.read_config(Register::Gpinten).await?.to_be_bytes();
@@ -321,6 +371,9 @@ where
         self.write_config(Register::Gpinten, reg).await
     }
 
+    /**
+     * Function used to enable the interrupt on the input
+     */
     #[inline]
     pub async fn enable_interrupt(&mut self, port: MyPort, pin: PinNumber) -> Result<(), Error> {
         let mut reg = self.read_config(Register::Gpinten).await?.to_be_bytes();
@@ -334,6 +387,9 @@ where
         self.write_config(Register::Gpinten, reg).await
     }
 
+    /**
+     * Function used to verify the interrupt on the input
+     */
     #[inline]
     pub async fn get_interrupted_pin(&mut self, port: MyPort) -> Option<PinNumber> {
         let pin_msk = self
@@ -435,7 +491,7 @@ mod tests {
     #[test]
     fn test_write_config_error() {
         let expectations = [
-            I2cTransaction::write(0x40, vector3(Register::Gpio as u8, 0x10, 0xff))
+            I2cTransaction::write(0x40, vector3(Register::Gpio as u8, 0xff, 0x10))
                 .with_error(embedded_hal::i2c::ErrorKind::Other),
         ];
         let mut i2c = I2cMock::new(&expectations);
@@ -452,12 +508,12 @@ mod tests {
     fn test_write_config_success() {
         let expectations = [I2cTransaction::write(
             0x40,
-            vector3(Register::Gpio as u8, 0x10, 0xff),
+            vector3(Register::Gpio as u8, 0xff, 0x10),
         )];
         let mut i2c = I2cMock::new(&expectations);
         let mut mcp: MCP23017<embedded_hal_mock::common::Generic<I2cTransaction>, Configuring> =
             MCP23017::new(i2c.clone(), 0x40);
-        let result = mcp.write_config(Register::Gpio, 0x10ff);
+        let result = mcp.write_config(Register::Gpio, 0x10ff); //0xaabb
         assert_eq!((), result.unwrap());
 
         //finalize execution
@@ -540,7 +596,7 @@ mod tests {
     fn test_write_success() {
         let expectations = [
             I2cTransaction::write(0x40, vector3(Register::Iodir as u8, 0x00, 0x00)),
-            I2cTransaction::write(0x40, vector3(Register::Gpio as u8, 0x22, 0x11)),
+            I2cTransaction::write(0x40, vector3(Register::Gpio as u8, 0x11, 0x22)),
         ];
 
         let mut i2c = I2cMock::new(&expectations);
@@ -558,7 +614,7 @@ mod tests {
     fn test_write_error() {
         let expectations = [
             I2cTransaction::write(0x40, vector3(Register::Iodir as u8, 0x00, 0x00)),
-            I2cTransaction::write(0x40, vector3(Register::Gpio as u8, 0x22, 0x11))
+            I2cTransaction::write(0x40, vector3(Register::Gpio as u8, 0x11, 0x22))
                 .with_error(embedded_hal::i2c::ErrorKind::Other),
         ];
 
@@ -578,7 +634,7 @@ mod tests {
         let expectations = [
             I2cTransaction::write(0x40, vector3(Register::Iodir as u8, 0x00, 0x00)),
             I2cTransaction::write_read(0x40, vector1(Register::Gpio as u8), vector2(0xff, 0xff)),
-            I2cTransaction::write(0x40, vector3(Register::Gpio as u8, 0xfe, 0xff))
+            I2cTransaction::write(0x40, vector3(Register::Gpio as u8, 0xff, 0xfe))
                 .with_error(embedded_hal::i2c::ErrorKind::Other),
         ];
 
@@ -600,9 +656,9 @@ mod tests {
         let expectations = [
             I2cTransaction::write(0x40, vector3(Register::Iodir as u8, 0x00, 0x00)),
             I2cTransaction::write_read(0x40, vector1(Register::Gpio as u8), vector2(0xff, 0xff)),
-            I2cTransaction::write(0x40, vector3(Register::Gpio as u8, 0xfe, 0xff)),
-            I2cTransaction::write_read(0x40, vector1(Register::Gpio as u8), vector2(0xff, 0xff)),
             I2cTransaction::write(0x40, vector3(Register::Gpio as u8, 0xff, 0xfe)),
+            I2cTransaction::write_read(0x40, vector1(Register::Gpio as u8), vector2(0xff, 0xff)),
+            I2cTransaction::write(0x40, vector3(Register::Gpio as u8, 0xfe, 0xff)),
         ];
 
         let mut i2c = I2cMock::new(&expectations);
@@ -730,7 +786,7 @@ mod tests {
             //set_interrupt_on (read_config)
             I2cTransaction::write_read(0x40, vector1(Register::Intcon as u8), vector2(0xff, 0xdd)),
             //set_interrupt_on (write_config)
-            I2cTransaction::write(0x40, vector3(Register::Intcon as u8, 0xff, 0xdc))
+            I2cTransaction::write(0x40, vector3(Register::Intcon as u8, 0xdc, 0xff))
                 .with_error(embedded_hal::i2c::ErrorKind::Other),
         ];
 
@@ -758,7 +814,7 @@ mod tests {
             //set_interrupt_on (read_config)
             I2cTransaction::write_read(0x40, vector1(Register::Intcon as u8), vector2(0xff, 0xdd)),
             //set_interrupt_on (write_config)
-            I2cTransaction::write(0x40, vector3(Register::Intcon as u8, 0xff, 0xdc)),
+            I2cTransaction::write(0x40, vector3(Register::Intcon as u8, 0xdc, 0xff)),
         ];
 
         let mut i2c = I2cMock::new(&expectations);
@@ -786,7 +842,7 @@ mod tests {
             I2cTransaction::write_read(0x40, vector1(Register::Intcon as u8), vector2(0xff, 0xff)),
             //set_interrupt_compare (write_config)
             I2cTransaction::write_read(0x40, vector1(Register::Defval as u8), vector2(0xff, 0xfe)),
-            I2cTransaction::write(0x40, vector3(Register::Defval as u8, 0xff, 0xfe))
+            I2cTransaction::write(0x40, vector3(Register::Defval as u8, 0xfe, 0xff))
                 .with_error(embedded_hal::i2c::ErrorKind::Other),
         ];
 
@@ -816,7 +872,7 @@ mod tests {
             //set_interrupt_compare (read_config)
             I2cTransaction::write_read(0x40, vector1(Register::Defval as u8), vector2(0xff, 0xff)),
             //set_interrupt_compare (write_config)
-            I2cTransaction::write(0x40, vector3(Register::Defval as u8, 0xff, 0xfe)),
+            I2cTransaction::write(0x40, vector3(Register::Defval as u8, 0xfe, 0xff)),
         ];
 
         let mut i2c = I2cMock::new(&expectations);
@@ -1010,7 +1066,7 @@ mod tests {
                 vector1(Register::Gpinten as u8),
                 vector2(0b00000000, 0b00000000),
             ),
-            I2cTransaction::write(0x40, vector3(Register::Gpinten as u8, 0, 1))
+            I2cTransaction::write(0x40, vector3(Register::Gpinten as u8, 1, 0))
                 .with_error(embedded_hal::i2c::ErrorKind::Other),
         ];
 
@@ -1038,7 +1094,7 @@ mod tests {
                 vector1(Register::Gpinten as u8),
                 vector2(0b00000000, 0b00000000),
             ),
-            I2cTransaction::write(0x40, vector3(Register::Gpinten as u8, 0, 1)),
+            I2cTransaction::write(0x40, vector3(Register::Gpinten as u8, 1, 0)),
         ];
 
         let mut i2c = I2cMock::new(&expectations);

@@ -23,6 +23,7 @@ This driver allows you to:
 - set internall pull resistor
 - read or write to pin/port/chip dependiong on the mode choosen
 
+NOTE: When operating in 16bit mode, use LittleEndian formatting (0xbbaa).
 
 # Version Revision
 
@@ -34,9 +35,9 @@ features = ["async"] - enables support for async Rust
 
 features = ["chipmode"] - The driver operates as a 1x 16bit device set entirely as output or input
 
-features = ["portmode"] - The driver operates as a 2x 8bit port device
+features = ["portmode"] - The driver operates as a 2x 8bit port device, each port is configured individually
 
-features = ["pinmode"] - The driver operates as a 16x 1bit pins device configured individually
+features = ["pinmode"] - The driver operates as a 16x 1bit pins device, each pin is configured individually
 
 ATTENTION: ENABLE ONLY ONE OF THE MODES OR FACE THE CONSEQUENCES.... ASYNC CAN BE USED ON ANY MODE
 

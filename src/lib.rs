@@ -9,10 +9,10 @@ pub mod pinmode;
 #[cfg(feature = "portmode")]
 pub mod portmode;
 
-mod interface;
-pub mod registers;
+pub mod prelude;
+mod registers;
 
-use registers::*;
+use prelude::SlaveAddressing;
 
 /////// Support functions
 
