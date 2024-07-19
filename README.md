@@ -47,3 +47,133 @@ To use the driver, you must have a concrete implementation of the
 [embedded-hal](https://crates.io/crates/embedded-hal) traits.  This example uses
 [stm32f4xx-hal](https://crates.io/crates/stm32f4xx-hal):
 
+
+When using chipmode, the driver will operate in 16bit, the code below will set all pins to output:
+
+``` rust
+use core::cell::RefCell;
+use embedded_hal_bus::i2c;
+use mcp23017_tp::{chipmode, prelude::*};
+
+    let mut i2c = dp.I2C1.i2c(
+        (scl, sda),
+        Mode::Standard {
+            frequency: 100.kHz(),
+        },
+        &clocks,
+    );
+
+    let i2c_ref_cell = RefCell::new(i2c);
+
+    let mut mcp = chipmode::MCP23017::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
+        .set_as_output()
+        .unwrap();
+
+    loop {
+          mcp.write(0xbbaa).unwrap();
+          delay.delay_ms(2000);
+
+          // u16: 0xbbaa - u8[]: [0]aa [1]bb (LittleEndian)
+          mcp.write(0x0000).unwrap();
+          delay.delay_ms(2000);
+        }
+```
+
+When using portmode, the driver will operate in 2x8bit, the code below will set port A as output and port B as input:
+
+``` rust
+use core::cell::RefCell;
+use embedded_hal_bus::i2c;
+use mcp23017_tp::{chipmode, prelude::*};
+
+    let mut i2c = dp.I2C1.i2c(
+        (scl, sda),
+        Mode::Standard {
+            frequency: 100.kHz(),
+        },
+        &clocks,
+    );
+
+    let i2c_ref_cell = RefCell::new(i2c);
+
+    let mut porta = portmode::PortA::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
+         .set_as_output()
+         .unwrap();
+    
+    let mut portb = portmode::PortB::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
+        .set_as_input()
+        .unwrap()
+        .set_pull(PinSet::High)
+        .unwrap()
+        .ready();
+
+    loop {
+          porta.write(0xff).unwrap();
+          delay.delay_ms(2000);
+          porta.write(0x00).unwrap();
+          delay.delay_ms(2000);
+
+          // u16: 0xbbaa - u8[]: [0]aa [1]bb (LittleEndian)
+          mcp.write(0x0000).unwrap();
+          delay.delay_ms(2000);
+          rprintln!("{:#02x}", portb.read().unwrap());
+        }
+```
+
+When using pinmode, the driver will operate in 16x1bit, the code below will set pin A1 and pin B3 as input:
+
+``` rust
+use core::cell::RefCell;
+use embedded_hal_bus::i2c;
+use mcp23017_tp::{chipmode, prelude::*};
+
+    let mut i2c = dp.I2C1.i2c(
+        (scl, sda),
+        Mode::Standard {
+            frequency: 100.kHz(),
+        },
+        &clocks,
+    );
+
+    let i2c_ref_cell = RefCell::new(i2c);
+
+    let mut pina1 = pinmode::Pina1::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
+        .set_as_input()
+        .unwrap()
+        .set_pull(PinSet::High)
+        .unwrap()
+        .ready();
+
+    let mut pinb3 = pinmode::Pinb3::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
+        .set_as_input()
+        .unwrap()
+        .set_pull(PinSet::High)
+        .unwrap()
+        .ready();
+
+    loop {
+          delay.delay_ms(2000);
+          rprintln!(
+              "{:#02x} {:#02x}",
+              pina1.read().unwrap(),
+              pinb3.read().unwrap()
+          );
+        }
+```
+
+# License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
+  http://www.apache.org/licenses/LICENSE-2.0)
+
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+## Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
