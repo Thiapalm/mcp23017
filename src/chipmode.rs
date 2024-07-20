@@ -15,9 +15,13 @@ pub struct MCP23017<I2C, State = Configuring> {
     state: core::marker::PhantomData<State>,
 }
 
+#[maybe_async_cfg::maybe(
+    sync(cfg(not(feature = "async")), keep_self,),
+    async(feature = "async", keep_self)
+)]
 trait RegReadWrite {
-    fn write_config(&mut self, register: Register, value: u16) -> Result<(), Error>;
-    fn read_config(&mut self, register: Register) -> Result<u16, Error>;
+    async fn write_config(&mut self, register: Register, value: u16) -> Result<(), Error>;
+    async fn read_config(&mut self, register: Register) -> Result<u16, Error>;
 }
 
 impl<I2C, E, State> MCP23017<I2C, State>
@@ -149,7 +153,7 @@ where
     ) -> Result<(), Error> {
         let mut result = self.read_config(Register::Gpio).await?;
 
-        let mut res = result.to_be_bytes();
+        let mut res = result.to_le_bytes();
         result = match (port, value) {
             (MyPort::Porta, PinSet::High) => {
                 res[0] = bit_set(res[0], pin);
@@ -206,7 +210,7 @@ where
     pub async fn set_interrupt_mirror(mut self, mirror: InterruptMirror) -> Result<Self, Error> {
         let mut reg = self.read_config(Register::Iocon).await?;
 
-        let mut regres = reg.to_be_bytes();
+        let mut regres = reg.to_le_bytes();
         match mirror {
             InterruptMirror::MirrorOn => {
                 regres[0] |= InterruptMirror::MirrorOn as u8;
@@ -236,7 +240,7 @@ where
     ) -> Result<Self, Error> {
         let mut reg = self.read_config(Register::Intcon).await?;
 
-        let mut regres = reg.to_be_bytes();
+        let mut regres = reg.to_le_bytes();
         reg = match (port, interrupt_on) {
             (MyPort::Porta, InterruptOn::PinChange) => {
                 regres[0] = bit_clear(regres[0], pin);
@@ -270,7 +274,7 @@ where
         pin: PinNumber,
         value: PinSet,
     ) -> Result<Self, Error> {
-        let intcon = self.read_config(Register::Intcon).await?.to_be_bytes();
+        let intcon = self.read_config(Register::Intcon).await?.to_le_bytes();
 
         match port {
             MyPort::Porta => {
@@ -285,7 +289,7 @@ where
             }
         }
 
-        let mut reg = self.read_config(Register::Defval).await?.to_be_bytes(); //change only valid if intcon is set to 1
+        let mut reg = self.read_config(Register::Defval).await?.to_le_bytes(); //change only valid if intcon is set to 1
 
         match (port, value) {
             (MyPort::Porta, PinSet::High) => {
@@ -345,7 +349,7 @@ where
      */
     #[inline]
     pub async fn read_pin(&mut self, port: MyPort, pin: PinNumber) -> Result<u8, Error> {
-        let mut result = self.read().await?.to_be_bytes();
+        let mut result = self.read().await?.to_le_bytes();
 
         let result = match port {
             MyPort::Porta => bit_read(result[0], pin),
@@ -360,7 +364,7 @@ where
      */
     #[inline]
     pub async fn disable_interrupt(&mut self, port: MyPort, pin: PinNumber) -> Result<(), Error> {
-        let mut reg = self.read_config(Register::Gpinten).await?.to_be_bytes();
+        let mut reg = self.read_config(Register::Gpinten).await?.to_le_bytes();
 
         match port {
             MyPort::Porta => reg[0] = bit_clear(reg[0], pin),
@@ -376,7 +380,7 @@ where
      */
     #[inline]
     pub async fn enable_interrupt(&mut self, port: MyPort, pin: PinNumber) -> Result<(), Error> {
-        let mut reg = self.read_config(Register::Gpinten).await?.to_be_bytes();
+        let mut reg = self.read_config(Register::Gpinten).await?.to_le_bytes();
 
         match port {
             MyPort::Porta => reg[0] = bit_set(reg[0], pin),
@@ -396,7 +400,7 @@ where
             .read_config(Register::Intf)
             .await
             .unwrap_or(0)
-            .to_be_bytes();
+            .to_le_bytes();
 
         let result = match port {
             MyPort::Porta => {
@@ -786,7 +790,7 @@ mod tests {
             //set_interrupt_on (read_config)
             I2cTransaction::write_read(0x40, vector1(Register::Intcon as u8), vector2(0xff, 0xdd)),
             //set_interrupt_on (write_config)
-            I2cTransaction::write(0x40, vector3(Register::Intcon as u8, 0xdc, 0xff))
+            I2cTransaction::write(0x40, vector3(Register::Intcon as u8, 0xff, 0xdc))
                 .with_error(embedded_hal::i2c::ErrorKind::Other),
         ];
 
@@ -797,7 +801,7 @@ mod tests {
         let mut result = mcp
             .set_as_input()
             .unwrap()
-            .set_interrupt_on(MyPort::Porta, PinNumber::Pin0, InterruptOn::PinChange)
+            .set_interrupt_on(MyPort::Portb, PinNumber::Pin0, InterruptOn::PinChange)
             .unwrap_err();
 
         assert_eq!(Error::CommunicationErr, result);
@@ -814,7 +818,7 @@ mod tests {
             //set_interrupt_on (read_config)
             I2cTransaction::write_read(0x40, vector1(Register::Intcon as u8), vector2(0xff, 0xdd)),
             //set_interrupt_on (write_config)
-            I2cTransaction::write(0x40, vector3(Register::Intcon as u8, 0xdc, 0xff)),
+            I2cTransaction::write(0x40, vector3(Register::Intcon as u8, 0xff, 0xdc)),
         ];
 
         let mut i2c = I2cMock::new(&expectations);
@@ -824,7 +828,7 @@ mod tests {
         let mut result = mcp
             .set_as_input()
             .unwrap()
-            .set_interrupt_on(MyPort::Porta, PinNumber::Pin0, InterruptOn::PinChange)
+            .set_interrupt_on(MyPort::Portb, PinNumber::Pin0, InterruptOn::PinChange)
             .unwrap();
 
         assert_eq!(0x40, result.address);
@@ -841,7 +845,7 @@ mod tests {
             //set_interrupt_compare (read_config)
             I2cTransaction::write_read(0x40, vector1(Register::Intcon as u8), vector2(0xff, 0xff)),
             //set_interrupt_compare (write_config)
-            I2cTransaction::write_read(0x40, vector1(Register::Defval as u8), vector2(0xff, 0xfe)),
+            I2cTransaction::write_read(0x40, vector1(Register::Defval as u8), vector2(0xff, 0xff)),
             I2cTransaction::write(0x40, vector3(Register::Defval as u8, 0xfe, 0xff))
                 .with_error(embedded_hal::i2c::ErrorKind::Other),
         ];
@@ -995,7 +999,7 @@ mod tests {
             address: 0x40,
             state: core::marker::PhantomData::<InputReady>,
         };
-        let result = mcp.read_pin(MyPort::Porta, PinNumber::Pin0).unwrap();
+        let result = mcp.read_pin(MyPort::Portb, PinNumber::Pin0).unwrap();
 
         assert_eq!(1, result);
         //finalize execution
@@ -1022,7 +1026,7 @@ mod tests {
             state: core::marker::PhantomData::<InputReady>,
         };
         let result = mcp
-            .disable_interrupt(MyPort::Porta, PinNumber::Pin0)
+            .disable_interrupt(MyPort::Portb, PinNumber::Pin0)
             .unwrap_err();
 
         assert_eq!(Error::CommunicationErr, result);
@@ -1049,7 +1053,7 @@ mod tests {
             state: core::marker::PhantomData::<InputReady>,
         };
         let result = mcp
-            .disable_interrupt(MyPort::Porta, PinNumber::Pin0)
+            .disable_interrupt(MyPort::Portb, PinNumber::Pin0)
             .unwrap();
 
         assert_eq!((), result);
@@ -1150,7 +1154,7 @@ mod tests {
             address: 0x40,
             state: core::marker::PhantomData::<InputReady>,
         };
-        let result = mcp.get_interrupted_pin(MyPort::Porta);
+        let result = mcp.get_interrupted_pin(MyPort::Portb);
 
         assert_eq!(Some(PinNumber::Pin7), result);
         //finalize execution

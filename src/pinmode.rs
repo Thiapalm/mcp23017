@@ -20,9 +20,13 @@ use embedded_hal::i2c::I2c;
 #[cfg(feature = "async")]
 use embedded_hal_async::i2c::I2c;
 
+#[maybe_async_cfg::maybe(
+    sync(cfg(not(feature = "async")), keep_self,),
+    async(feature = "async", keep_self)
+)]
 trait Regread {
-    fn read_config(&mut self, register: Register) -> Result<u8, Error>;
-    fn write_config(&mut self, register: Register, value: u8) -> Result<(), Error>;
+    async fn read_config(&mut self, register: Register) -> Result<u8, Error>;
+    async fn write_config(&mut self, register: Register, value: u8) -> Result<(), Error>;
 }
 
 macro_rules! define_pin {

@@ -3,8 +3,8 @@
 > 16-Bit I/O Expander with Serial Interface
 
 <p align=center>
-  <a href="https://crates.io/crates/mcp23017-tp"><img src="https://img.shields.io/badge/crates.io-v0.1.0-red"></a>
- <a href="https://docs.rs/mcp23017-tp/0.3.0/mcp23017-tp/"><img src="https://img.shields.io/badge/docs.rs-v0.1.0-orange"></a>
+  <a href="https://crates.io/crates/mcp23017-tp"><img src="https://img.shields.io/badge/crates.io-v0.1.1-red"></a>
+ <a href="https://docs.rs/mcp23017-tp/0.1.1/mcp23017_tp/"><img src="https://img.shields.io/badge/docs.rs-v0.1.1-orange"></a>
  <a href="http://www.apache.org/licenses/LICENSE-2.0"><img src="https://img.shields.io/badge/License-ApacheV2-green"></a>
  <a href="http://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-green"></a>
 </p>
@@ -29,9 +29,11 @@ NOTE: When operating in 16bit mode, use LittleEndian formatting (0xbbaa).
 
 0.1.0 - First Version
 
+0.1.1 - Fixed doc generation, fixed async support in traits, improved prelude for feature usage, fixed endianess for interrupt functions
+
 # Features 
 
-features = ["async"] - enables support for async Rust
+features = ["async"] - enables support for async Rust (Currently embedded_hal_bus does not implement async for I2C, therefore if using more than one pin/port, disable the async feature)
 
 features = ["chipmode"] - The driver operates as a 1x 16bit device set entirely as output or input
 
@@ -53,7 +55,7 @@ When using chipmode, the driver will operate in 16bit, the code below will set a
 ``` rust
 use core::cell::RefCell;
 use embedded_hal_bus::i2c;
-use mcp23017_tp::{chipmode, prelude::*};
+use mcp23017_tp::prelude::*;
 
     let mut i2c = dp.I2C1.i2c(
         (scl, sda),
@@ -65,7 +67,7 @@ use mcp23017_tp::{chipmode, prelude::*};
 
     let i2c_ref_cell = RefCell::new(i2c);
 
-    let mut mcp = chipmode::MCP23017::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
+    let mut mcp = mcp23017_tp::MCP23017::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
         .set_as_output()
         .unwrap();
 
@@ -84,7 +86,7 @@ When using portmode, the driver will operate in 2x8bit, the code below will set 
 ``` rust
 use core::cell::RefCell;
 use embedded_hal_bus::i2c;
-use mcp23017_tp::{chipmode, prelude::*};
+use mcp23017_tp::prelude::*;
 
     let mut i2c = dp.I2C1.i2c(
         (scl, sda),
@@ -96,11 +98,11 @@ use mcp23017_tp::{chipmode, prelude::*};
 
     let i2c_ref_cell = RefCell::new(i2c);
 
-    let mut porta = portmode::PortA::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
+    let mut porta = mcp23017_tp::PortA::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
          .set_as_output()
          .unwrap();
     
-    let mut portb = portmode::PortB::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
+    let mut portb = mcp23017_tp::PortB::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
         .set_as_input()
         .unwrap()
         .set_pull(PinSet::High)
@@ -113,9 +115,6 @@ use mcp23017_tp::{chipmode, prelude::*};
           porta.write(0x00).unwrap();
           delay.delay_ms(2000);
 
-          // u16: 0xbbaa - u8[]: [0]aa [1]bb (LittleEndian)
-          mcp.write(0x0000).unwrap();
-          delay.delay_ms(2000);
           rprintln!("{:#02x}", portb.read().unwrap());
         }
 ```
@@ -125,7 +124,7 @@ When using pinmode, the driver will operate in 16x1bit, the code below will set 
 ``` rust
 use core::cell::RefCell;
 use embedded_hal_bus::i2c;
-use mcp23017_tp::{chipmode, prelude::*};
+use mcp23017_tp::prelude::*;
 
     let mut i2c = dp.I2C1.i2c(
         (scl, sda),
@@ -137,14 +136,14 @@ use mcp23017_tp::{chipmode, prelude::*};
 
     let i2c_ref_cell = RefCell::new(i2c);
 
-    let mut pina1 = pinmode::Pina1::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
+    let mut pina1 = mcp23017_tp::Pina1::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
         .set_as_input()
         .unwrap()
         .set_pull(PinSet::High)
         .unwrap()
         .ready();
 
-    let mut pinb3 = pinmode::Pinb3::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
+    let mut pinb3 = mcp23017_tp::Pinb3::new(i2c::RefCellDevice::new(&i2c_ref_cell), address)
         .set_as_input()
         .unwrap()
         .set_pull(PinSet::High)
