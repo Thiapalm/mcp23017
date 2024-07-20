@@ -4,10 +4,18 @@
 
 #[cfg(feature = "chipmode")]
 pub mod chipmode;
+#[cfg(feature = "chipmode")]
+pub use crate::chipmode::*;
+
 #[cfg(feature = "pinmode")]
 pub mod pinmode;
+#[cfg(feature = "pinmode")]
+pub use crate::pinmode::*;
+
 #[cfg(feature = "portmode")]
 pub mod portmode;
+#[cfg(feature = "portmode")]
+pub use crate::portmode::*;
 
 pub mod prelude;
 mod registers;
